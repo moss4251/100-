@@ -4,29 +4,32 @@ interface RopeGraphicProps {
   className?: string;
   isDragging?: boolean;
   highlighted?: boolean;
+  width?: number;
 }
 
 export const RopeGraphic: React.FC<RopeGraphicProps> = ({
   className = '',
   isDragging = false,
   highlighted = false,
+  width = 270,
 }) => {
   return (
     <div
       className={`relative select-none flex flex-col items-center justify-center cursor-grab active:cursor-grabbing transition-transform ${
         isDragging ? 'scale-102 shadow-xl' : 'hover:scale-[1.01]'
       } ${highlighted ? 'ring-2 ring-red-500 rounded-lg' : ''} ${className}`}
-      style={{ width: '270px', height: '36px' }}
+      style={{ width: `${width}px`, height: '36px' }}
       title="已解开并展开在木棒下方的捆绳"
     >
       {/* Horizontally unfolded long rope / ribbon lying flat under the 10 wooden sticks */}
       <svg
-        width="270"
+        width={width}
         height="32"
         viewBox="0 0 270 32"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         className="filter drop-shadow-sm w-full h-full overflow-visible"
+        preserveAspectRatio="none"
       >
         {/* Left frayed ribbon end */}
         <path
@@ -98,9 +101,9 @@ export const RopeGraphic: React.FC<RopeGraphicProps> = ({
       </svg>
 
       {/* Label under the rope */}
-      <div className="absolute -bottom-2 px-2 py-0.2 bg-red-100/90 text-red-800 text-[10px] font-bold rounded-full border border-red-300 shadow-2xs pointer-events-none flex items-center gap-1">
+      <div className="absolute -bottom-2 px-1.5 sm:px-2 py-0.2 bg-red-100/90 text-red-800 text-[9px] sm:text-[10px] font-bold rounded-full border border-red-300 shadow-2xs pointer-events-none flex items-center gap-1 whitespace-nowrap">
         <span className="w-1.5 h-1.5 rounded-full bg-red-600 animate-pulse" />
-        <span>已展开的捆绳（原固定10根小棒）</span>
+        <span>已展开的捆绳</span>
       </div>
     </div>
   );

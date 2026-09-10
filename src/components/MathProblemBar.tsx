@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
-  RotateCcw,
   LayoutGrid,
   Trash2,
   Check,
@@ -75,7 +74,7 @@ export const MathProblemBar: React.FC<MathProblemBarProps> = ({
       setCheckResult({
         status: 'warning',
         message: `画板为空！请先摆出被减数 ${a} 根木棒`,
-        details: `可从左下角拖出 ${Math.floor(a / 10)} 捆和 ${uA} 根，或点击“一键摆放被减数”。`,
+        details: `可从左下角拖出 ${Math.floor(a / 10)} 捆和 ${uA} 根，或点击“摆放被减数”。`,
       });
       playNoticeSound();
       return;
@@ -157,28 +156,25 @@ export const MathProblemBar: React.FC<MathProblemBarProps> = ({
   };
 
   return (
-    <div
-      id="math-problem-bar"
-      className="w-full bg-white/90 backdrop-blur-md border-b border-amber-900/10 px-3 sm:px-6 py-2 z-20 select-none shadow-2xs"
-    >
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-2.5">
-        {/* Left: Math Equation Display & Random Trigger */}
-        <div className="flex items-center flex-wrap gap-2.5">
-          <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-1.5 shadow-2xs">
-            <span className="text-xs font-black text-amber-900 tracking-wide">
-              退位减法算式：
+    <div className="w-full flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2.5">
+        {/* Left: Math Equation Display */}
+        <div className="flex items-center flex-wrap gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/30 rounded-xl px-2 sm:px-3 py-1 shadow-2xs">
+            <span className="text-[10px] sm:text-xs font-black text-amber-900 tracking-wide hidden xs:inline">
+              算式：
             </span>
             {currentProblem ? (
-              <div className="flex items-baseline gap-1.5 text-amber-950 font-black">
-                <span className="text-xl sm:text-2xl font-mono text-amber-800">
+              <div className="flex items-baseline gap-1 text-amber-950 font-black">
+                <span className="text-base sm:text-xl md:text-2xl font-mono text-amber-800">
                   {currentProblem.a}
                 </span>
-                <span className="text-lg text-amber-600 font-sans">－</span>
-                <span className="text-xl sm:text-2xl font-mono text-rose-700">
+                <span className="text-sm sm:text-base text-amber-600 font-sans">－</span>
+                <span className="text-base sm:text-xl md:text-2xl font-mono text-rose-700">
                   {currentProblem.b}
                 </span>
-                <span className="text-lg text-amber-600 font-sans">＝</span>
-                <span className="text-xl sm:text-2xl font-mono px-2 py-0.5 rounded-lg bg-white border border-amber-300 text-amber-900 min-w-[36px] text-center shadow-inner">
+                <span className="text-sm sm:text-base text-amber-600 font-sans">＝</span>
+                <span className="text-base sm:text-xl md:text-2xl font-mono px-1.5 sm:px-2 py-0.2 rounded-lg bg-white border border-amber-300 text-amber-900 min-w-[28px] sm:min-w-[36px] text-center shadow-inner">
                   {checkResult?.status === 'success' ? currentProblem.diff : '？'}
                 </span>
               </div>
@@ -197,11 +193,12 @@ export const MathProblemBar: React.FC<MathProblemBarProps> = ({
               setCheckResult(null);
               playPopSound();
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-xl font-bold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer"
+            className="flex items-center gap-1 px-2.5 sm:px-3 py-1 sm:py-1.5 bg-amber-600 hover:bg-amber-700 active:bg-amber-800 text-white rounded-xl font-bold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer shrink-0"
             title="随机生成一道100以内的退位减法题目"
           >
-            <Shuffle className="w-3.5 h-3.5" />
-            <span>随机出题</span>
+            <Shuffle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+            <span className="hidden xs:inline">随机出题</span>
+            <span className="xs:hidden">出题</span>
           </button>
 
           {/* Helper: Auto Setup Minuend (一键摆放被减数) */}
@@ -212,25 +209,26 @@ export const MathProblemBar: React.FC<MathProblemBarProps> = ({
                 onAutoSetupMinuend();
                 setCheckResult(null);
               }}
-              className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-900 rounded-xl font-bold text-xs border border-amber-300 shadow-2xs transition-all cursor-pointer"
+              className="flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 bg-amber-100 hover:bg-amber-200 active:bg-amber-300 text-amber-900 rounded-xl font-bold text-xs border border-amber-300 shadow-2xs transition-all cursor-pointer shrink-0"
               title={`在画板上自动摆放被减数 ${currentProblem.a} 根小棒`}
             >
-              <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-              <span>摆放被减数({currentProblem.a})</span>
+              <Sparkles className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-700" />
+              <span className="hidden sm:inline">摆放被减数({currentProblem.a})</span>
+              <span className="sm:hidden">摆放({currentProblem.a})</span>
             </button>
           )}
         </div>
 
-        {/* Center/Right: Action Buttons & Operation Verification */}
-        <div className="flex items-center flex-wrap gap-2">
+        {/* Center/Right: Action Buttons */}
+        <div className="flex items-center flex-wrap gap-1 sm:gap-1.5">
           {/* Check Student's Operation Button */}
           <button
             id="btn-check-operation"
             onClick={handleCheckOperation}
-            className="flex items-center gap-1.5 px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl font-bold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer"
+            className="flex items-center gap-1 px-2.5 sm:px-3.5 py-1 sm:py-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl font-bold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer"
             title="检查画板上的操作与算式是否匹配"
           >
-            <CheckCircle2 className="w-4 h-4" />
+            <CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>检查操作</span>
           </button>
 
@@ -238,11 +236,12 @@ export const MathProblemBar: React.FC<MathProblemBarProps> = ({
           <button
             id="btn-tidy-board"
             onClick={onTidy}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
             title="整理并对齐画板上的所有小棒"
           >
-            <LayoutGrid className="w-3.5 h-3.5 text-slate-500" />
+            <LayoutGrid className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500" />
             <span className="hidden sm:inline">整理排列</span>
+            <span className="sm:hidden">整理</span>
           </button>
 
           {/* Clear board button */}
@@ -252,10 +251,10 @@ export const MathProblemBar: React.FC<MathProblemBarProps> = ({
               onClear();
               setCheckResult(null);
             }}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-red-200 bg-red-50/70 hover:bg-red-100 text-red-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1 sm:py-1.5 rounded-xl border border-red-200 bg-red-50/70 hover:bg-red-100 text-red-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer"
             title="清空画板上的所有木棒与捆绳"
           >
-            <Trash2 className="w-3.5 h-3.5 text-red-500" />
+            <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-red-500" />
             <span>清空</span>
           </button>
         </div>
@@ -265,10 +264,10 @@ export const MathProblemBar: React.FC<MathProblemBarProps> = ({
       <AnimatePresence>
         {checkResult && (
           <motion.div
-            initial={{ opacity: 0, height: 0, y: -6 }}
+            initial={{ opacity: 0, height: 0, y: -4 }}
             animate={{ opacity: 1, height: 'auto', y: 0 }}
-            exit={{ opacity: 0, height: 0, y: -6 }}
-            className={`mt-2 p-2.5 rounded-xl border text-xs flex items-start gap-2 ${
+            exit={{ opacity: 0, height: 0, y: -4 }}
+            className={`p-2 sm:p-2.5 rounded-xl border text-[11px] sm:text-xs flex items-start gap-1.5 sm:gap-2 ${
               checkResult.status === 'success'
                 ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
                 : checkResult.status === 'warning'
@@ -277,10 +276,10 @@ export const MathProblemBar: React.FC<MathProblemBarProps> = ({
             }`}
           >
             {checkResult.status === 'success' ? (
-              <Check className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 shrink-0 mt-0.5" />
             ) : (
               <AlertCircle
-                className={`w-4 h-4 shrink-0 mt-0.5 ${
+                className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 mt-0.5 ${
                   checkResult.status === 'warning' ? 'text-amber-600' : 'text-sky-600'
                 }`}
               />
@@ -288,7 +287,7 @@ export const MathProblemBar: React.FC<MathProblemBarProps> = ({
             <div className="flex-1">
               <span className="font-bold">{checkResult.message}</span>
               {checkResult.details && (
-                <p className="text-[11px] mt-0.5 opacity-90">{checkResult.details}</p>
+                <p className="text-[10px] sm:text-[11px] mt-0.5 opacity-90">{checkResult.details}</p>
               )}
             </div>
             <button
