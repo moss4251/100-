@@ -1,21 +1,27 @@
 /**
  * Grade 2 Math Subtraction with Regrouping (100以内退位减法) Interactive Tool
- * Mobile & Desktop Responsive Version
+ * Mobile Ultra-Compact & Desktop Responsive Edition
  */
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { BoardItem, ItemType, SelectionRect, MathProblem } from '../src/types';
 import { TopBookDisplay } from './components/TopBookDisplay';
+import { MobileCompactHeader } from './components/MobileCompactHeader';
 import { SpawnerDock } from './components/SpawnerDock';
 import { DeleteBoxTool } from './components/DeleteBoxTool';
 import { BundleGraphic } from './components/BundleGraphic';
 import { StickGraphic } from './components/StickGraphic';
 import { RopeGraphic } from './components/RopeGraphic';
 import { MathProblemBar } from './components/MathProblemBar';
+import { BookShelfModal } from './components/BookShelfModal';
+import { FloatingToast, CheckResultData } from './components/FloatingToast';
+import { evaluateSubtractionOperation } from './utils/mathChecker';
 import {
   playPopSound,
   playUnbundleSound,
   playDeleteSound,
+  playSuccessSound,
+  playNoticeSound,
   toggleSound,
   isSoundEnabled,
 } from './utils/audio';
@@ -28,17 +34,13 @@ const LIBRARY_BG_URL =
 
 // Helper: Generate random 100-within subtraction with regrouping (100以内退位减法)
 function generateRandomRegroupingProblem(): MathProblem {
-  // Minuend A between 21 and 98
-  // Units digit uA between 0 and 7
   const uA = Math.floor(Math.random() * 8); // 0..7
   const tA = Math.floor(Math.random() * 8) + 2; // 2..9 -> tens 2..9
   const a = tA * 10 + uA; // 20..97
 
-  // Subtrahend units uB must be strictly greater than uA (requires regrouping/退位)
   const minUB = uA + 1;
   const uB = Math.floor(Math.random() * (10 - minUB)) + minUB; // minUB..9
 
-  // Subtrahend tens tB between 0 and tA - 1 (so B < A)
   const maxTB = tA - 1;
   const tB = Math.floor(Math.random() * (maxTB + 1)); // 0..maxTB
   const b = tB * 10 + uB;
@@ -62,6 +64,12 @@ export default function App() {
 
   // Statistics
   const [deletedCountSinceStart, setDeletedCountSinceStart] = useState<number>(0);
+
+  // Operation check result state (floating banner)
+  const [checkResult, setCheckResult] = useState<CheckResultData | null>(null);
+
+  // Mobile Book Shelf Modal
+  const [isBookShelfModalOpen, setIsBookShelfModalOpen] = useState<boolean>(false);
 
   // Sound state
   const [soundOn, setSoundOn] = useState<boolean>(true);
@@ -170,13 +178,12 @@ export default function App() {
     setItems((prev) => [...prev.filter((it) => it.id !== bundleId), ...newSticks, ropeItem]);
   }, [items]);
 
-  // Handle deletion of specific items (used by marquee selection or direct click in delete mode)
+  // Handle deletion of specific items
   const deleteItemsByIds = useCallback((idsToDelete: string[]) => {
     if (idsToDelete.length === 0) return;
 
     playDeleteSound();
 
-    // Calculate how many book units were deleted
     let subtractedBooks = 0;
     items.forEach((it) => {
       if (idsToDelete.includes(it.id)) {
@@ -187,12 +194,10 @@ export default function App() {
 
     setDeletedCountSinceStart((prev) => prev + subtractedBooks);
 
-    // Mark as deleting for visual animation
     setItems((prev) =>
       prev.map((it) => (idsToDelete.includes(it.id) ? { ...it, isDeleting: true } : it))
     );
 
-    // Remove from array after transition
     setTimeout(() => {
       setItems((prev) => prev.filter((it) => !idsToDelete.includes(it.id)));
     }, 250);
@@ -213,8 +218,8 @@ export default function App() {
   const handleSpawnDirectly = (type: 'bundle' | 'stick') => {
     if (!boardRef.current) return;
     const rect = boardRef.current.getBoundingClientRect();
-    const spawnX = Math.min(rect.width - 110, Math.max(25, 40 + Math.random() * (rect.width - 140)));
-    const spawnY = Math.min(rect.height - 140, Math.max(30, 40 + Math.random() * (rect.height - 180)));
+    const spawnX = Math.min(rect.width - 90, Math.max(20, 30 + Math.random() * (rect.width - 120)));
+    const spawnY = Math.min(rect.height - 110, Math.max(25, 30 + Math.random() * (rect.height - 150)));
 
     const newItem: BoardItem = {
       id: `${type[0]}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
@@ -231,7 +236,6 @@ export default function App() {
   const handleStartItemDrag = (item: BoardItem, e: React.PointerEvent) => {
     e.stopPropagation();
 
-    // If in delete mode, clicking directly on an item deletes it immediately!
     if (isDeleteModeActive) {
       deleteItemsByIds([item.id]);
       return;
@@ -250,13 +254,11 @@ export default function App() {
   const handleBoardPointerMove = (e: React.PointerEvent) => {
     const pos = getBoardPos(e.clientX, e.clientY);
 
-    // 1. If currently dragging a newly spawned item
     if (spawnerDrag) {
       setSpawnerDrag((prev) => (prev ? { ...prev, x: pos.x, y: pos.y } : null));
       return;
     }
 
-    // 2. If currently dragging an existing item on the board
     if (draggingItemId) {
       const boardRect = boardRef.current?.getBoundingClientRect();
       const maxX = boardRect ? boardRect.width - 35 : 2000;
@@ -277,7 +279,6 @@ export default function App() {
       return;
     }
 
-    // 3. If in deletion marquee mode and drawing the box
     if (isDeleteModeActive && isMarqueeActiveRef.current && selectionRect) {
       setSelectionRect((prev) => (prev ? { ...prev, currentX: pos.x, currentY: pos.y } : null));
     }
@@ -285,27 +286,24 @@ export default function App() {
 
   // Global pointer up on board
   const handleBoardPointerUp = (e: React.PointerEvent) => {
-    // 1. If dropping newly spawned item
     if (spawnerDrag) {
       const pos = getBoardPos(e.clientX, e.clientY);
       const newItem: BoardItem = {
         id: `${spawnerDrag.type[0]}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         type: spawnerDrag.type,
-        x: Math.max(15, pos.x - (spawnerDrag.type === 'bundle' ? 40 : 10)),
-        y: Math.max(15, pos.y - (spawnerDrag.type === 'bundle' ? 40 : 35)),
+        x: Math.max(15, pos.x - (spawnerDrag.type === 'bundle' ? 35 : 10)),
+        y: Math.max(15, pos.y - (spawnerDrag.type === 'bundle' ? 35 : 30)),
       };
       setItems((prev) => [...prev, newItem]);
       setSpawnerDrag(null);
       return;
     }
 
-    // 2. If releasing existing dragged item
     if (draggingItemId) {
       setDraggingItemId(null);
       return;
     }
 
-    // 3. If finishing deletion marquee box
     if (isDeleteModeActive && isMarqueeActiveRef.current && selectionRect) {
       isMarqueeActiveRef.current = false;
 
@@ -314,13 +312,11 @@ export default function App() {
       const minY = Math.min(selectionRect.startY, selectionRect.currentY);
       const maxY = Math.max(selectionRect.startY, selectionRect.currentY);
 
-      // Require meaningful selection box size (>10px) to prevent accidental taps
       if (maxX - minX > 10 && maxY - minY > 10) {
-        // Find all items intersecting or enclosed in the selection box
         const hitIds = items
           .filter((it) => {
-            const itemWidth = it.type === 'bundle' ? 95 : it.type === 'stick' ? 22 : 65;
-            const itemHeight = it.type === 'bundle' ? 95 : it.type === 'stick' ? 100 : 50;
+            const itemWidth = it.type === 'bundle' ? 85 : it.type === 'stick' ? 22 : 65;
+            const itemHeight = it.type === 'bundle' ? 85 : it.type === 'stick' ? 95 : 45;
 
             const itemRight = it.x + itemWidth;
             const itemBottom = it.y + itemHeight;
@@ -344,7 +340,6 @@ export default function App() {
   const handleBoardPointerDown = (e: React.PointerEvent) => {
     if (!isDeleteModeActive) return;
 
-    // Check if target is not a button or spawner
     const target = e.target as HTMLElement;
     if (target.closest('button') || target.closest('#infinite-spawner-dock')) {
       return;
@@ -360,7 +355,7 @@ export default function App() {
     });
   };
 
-  // Calculate items currently enclosed or intersecting the live selection rectangle
+  // Calculate live selected IDs
   const liveSelectedIds = React.useMemo(() => {
     if (!selectionRect) return new Set<string>();
     const minX = Math.min(selectionRect.startX, selectionRect.currentX);
@@ -372,8 +367,8 @@ export default function App() {
 
     const hit = new Set<string>();
     items.forEach((it) => {
-      const itemWidth = it.type === 'bundle' ? 95 : it.type === 'stick' ? 22 : 65;
-      const itemHeight = it.type === 'bundle' ? 95 : it.type === 'stick' ? 100 : 50;
+      const itemWidth = it.type === 'bundle' ? 85 : it.type === 'stick' ? 22 : 65;
+      const itemHeight = it.type === 'bundle' ? 85 : it.type === 'stick' ? 95 : 45;
       const itemRight = it.x + itemWidth;
       const itemBottom = it.y + itemHeight;
 
@@ -384,12 +379,13 @@ export default function App() {
     return hit;
   }, [selectionRect, items]);
 
-  // Trigger a new random subtraction problem and reset board to empty
+  // Trigger a new random subtraction problem
   const handleNewProblem = useCallback(() => {
     const prob = generateRandomRegroupingProblem();
     setCurrentProblem(prob);
     setItems([]);
     setDeletedCountSinceStart(0);
+    setCheckResult(null);
     playPopSound();
   }, []);
 
@@ -406,9 +402,8 @@ export default function App() {
     const isMobile = boardWidth < 600;
 
     if (isMobile) {
-      // Mobile screen: wrap bundles into rows
-      const bundleStepX = 86;
-      const maxBundlesPerRow = Math.max(2, Math.floor((boardWidth - 25) / bundleStepX));
+      const bundleStepX = 84;
+      const maxBundlesPerRow = Math.max(2, Math.floor((boardWidth - 20) / bundleStepX));
 
       for (let i = 0; i < bCount; i++) {
         const col = i % maxBundlesPerRow;
@@ -416,15 +411,14 @@ export default function App() {
         newItems.push({
           id: `bundle-setup-${timestamp}-${i}`,
           type: 'bundle',
-          x: 15 + col * bundleStepX,
-          y: 20 + row * 105,
+          x: 12 + col * bundleStepX,
+          y: 15 + row * 95,
         });
       }
 
-      // Single sticks placed under bundles
       const bundleRows = bCount > 0 ? Math.ceil(bCount / maxBundlesPerRow) : 0;
-      const sticksStartY = 20 + bundleRows * 105 + 10;
-      const maxSticksPerRow = Math.max(5, Math.floor((boardWidth - 25) / 24));
+      const sticksStartY = 15 + bundleRows * 95 + 10;
+      const maxSticksPerRow = Math.max(5, Math.floor((boardWidth - 20) / 22));
 
       for (let j = 0; j < sCount; j++) {
         const sCol = j % maxSticksPerRow;
@@ -432,36 +426,47 @@ export default function App() {
         newItems.push({
           id: `stick-setup-${timestamp}-${j}`,
           type: 'stick',
-          x: 15 + sCol * 24,
-          y: sticksStartY + sRow * 115,
+          x: 12 + sCol * 22,
+          y: sticksStartY + sRow * 105,
         });
       }
     } else {
-      // Desktop: place bundles to the left, single sticks to the right
       for (let i = 0; i < bCount; i++) {
         newItems.push({
           id: `bundle-setup-${timestamp}-${i}`,
           type: 'bundle',
-          x: 80 + i * 105,
-          y: 60,
+          x: 70 + i * 105,
+          y: 50,
         });
       }
 
-      const startStickX = 80 + bCount * 105 + 30;
+      const startStickX = 70 + bCount * 105 + 25;
       for (let j = 0; j < sCount; j++) {
         newItems.push({
           id: `stick-setup-${timestamp}-${j}`,
           type: 'stick',
           x: startStickX + j * 26,
-          y: 60,
+          y: 50,
         });
       }
     }
 
     setItems(newItems);
     setDeletedCountSinceStart(0);
+    setCheckResult(null);
     playPopSound();
   }, [currentProblem]);
+
+  // Check student's operation
+  const handleCheck = useCallback(() => {
+    const result = evaluateSubtractionOperation(currentProblem, items, deletedCountSinceStart);
+    setCheckResult(result);
+    if (result.status === 'success') {
+      playSuccessSound();
+    } else {
+      playNoticeSound();
+    }
+  }, [currentProblem, items, deletedCountSinceStart]);
 
   // Auto-tidy items on board with responsive wrapping
   const handleTidy = () => {
@@ -476,62 +481,60 @@ export default function App() {
     const isMobile = boardWidth < 600;
 
     if (isMobile) {
-      // Mobile wrap
-      const bundleStepX = 86;
-      const maxBundlesPerRow = Math.max(2, Math.floor((boardWidth - 25) / bundleStepX));
+      const bundleStepX = 84;
+      const maxBundlesPerRow = Math.max(2, Math.floor((boardWidth - 20) / bundleStepX));
 
       bundles.forEach((b, idx) => {
         const col = idx % maxBundlesPerRow;
         const row = Math.floor(idx / maxBundlesPerRow);
         tidied.push({
           ...b,
-          x: 15 + col * bundleStepX,
-          y: 20 + row * 105,
+          x: 12 + col * bundleStepX,
+          y: 15 + row * 95,
         });
       });
 
       const bundleRows = bundles.length > 0 ? Math.ceil(bundles.length / maxBundlesPerRow) : 0;
-      let currentY = 20 + bundleRows * 105 + 10;
+      let currentY = 15 + bundleRows * 95 + 10;
 
-      const maxSticksPerRow = Math.max(5, Math.floor((boardWidth - 25) / 24));
+      const maxSticksPerRow = Math.max(5, Math.floor((boardWidth - 20) / 22));
       sticks.forEach((s, idx) => {
         const sCol = idx % maxSticksPerRow;
         const sRow = Math.floor(idx / maxSticksPerRow);
         tidied.push({
           ...s,
-          x: 15 + sCol * 24,
-          y: currentY + sRow * 115,
+          x: 12 + sCol * 22,
+          y: currentY + sRow * 105,
         });
       });
 
       const stickRows = sticks.length > 0 ? Math.ceil(sticks.length / maxSticksPerRow) : 0;
-      currentY += stickRows * 115 + 10;
+      currentY += stickRows * 105 + 10;
 
       ropes.forEach((r, idx) => {
         tidied.push({
           ...r,
-          x: 15,
-          y: currentY + idx * 45,
+          x: 12,
+          y: currentY + idx * 40,
         });
       });
     } else {
-      // Desktop tidy
       bundles.forEach((b, idx) => {
         tidied.push({
           ...b,
-          x: 80 + idx * 105,
-          y: 60,
+          x: 70 + idx * 105,
+          y: 50,
         });
       });
 
-      const stickStartX = Math.max(80 + bundles.length * 105 + 30, 150);
+      const stickStartX = Math.max(70 + bundles.length * 105 + 25, 140);
       sticks.forEach((s, idx) => {
         const row = Math.floor(idx / 10);
         const col = idx % 10;
         tidied.push({
           ...s,
           x: stickStartX + col * 26,
-          y: 60 + row * 150,
+          y: 50 + row * 140,
         });
       });
 
@@ -539,7 +542,7 @@ export default function App() {
         tidied.push({
           ...r,
           x: stickStartX - 8,
-          y: 60 + idx * 150 + 115,
+          y: 50 + idx * 140 + 110,
         });
       });
     }
@@ -552,6 +555,7 @@ export default function App() {
   const handleClear = () => {
     setItems([]);
     setDeletedCountSinceStart(0);
+    setCheckResult(null);
     playPopSound();
   };
 
@@ -575,109 +579,141 @@ export default function App() {
         }}
       />
 
-      {/* 2. TOP BOOK DISPLAY & SYNCHRONIZED COUNTER (1:1 CORRESPONDENCE) */}
-      <TopBookDisplay
-        items={items}
-        deletedCountSinceStart={deletedCountSinceStart}
-      />
+      {/* 2. MOBILE-ONLY COMPACT SINGLE-ROW HEADER (ONLY 48px TALL! GIVES ~90% SCREEN TO CANVAS) */}
+      <div className="block md:hidden shrink-0">
+        <MobileCompactHeader
+          currentProblem={currentProblem}
+          items={items}
+          deletedCount={deletedCountSinceStart}
+          isDeleteModeActive={isDeleteModeActive}
+          soundOn={soundOn}
+          bgOpacity={bgOpacity}
+          onToggleDeleteMode={() => setIsDeleteModeActive((prev) => !prev)}
+          onNewProblem={handleNewProblem}
+          onAutoSetupMinuend={handleAutoSetupMinuend}
+          onCheck={handleCheck}
+          onClear={handleClear}
+          onTidy={handleTidy}
+          onToggleSound={handleToggleSound}
+          onChangeBgOpacity={(val) => setBgOpacity(val)}
+          onOpenBookShelf={() => setIsBookShelfModalOpen(true)}
+        />
+      </div>
 
-      {/* 3. RETREAT SUBTRACTION PROBLEM BAR & OPERATION CHECKER */}
-      <div className="w-full bg-white/85 backdrop-blur-md border-b border-amber-900/10 z-20 shadow-2xs">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-stretch md:items-center justify-between gap-1.5 sm:gap-2 px-2.5 sm:px-5 py-1 sm:py-1.5">
-          <div className="flex-1 min-w-0">
-            <MathProblemBar
-              currentProblem={currentProblem}
-              onNewProblem={handleNewProblem}
-              onAutoSetupMinuend={handleAutoSetupMinuend}
-              onClear={handleClear}
-              onTidy={handleTidy}
-              items={items}
-              deletedCount={deletedCountSinceStart}
-            />
-          </div>
+      {/* 3. DESKTOP-ONLY FULL HEADER & PROBLEM BAR (DISPLAYED ON SCREENS >= 768px) */}
+      <div className="hidden md:block shrink-0">
+        <TopBookDisplay
+          items={items}
+          deletedCountSinceStart={deletedCountSinceStart}
+        />
 
-          {/* Right tools: Delete Box Tool, Sound, Settings */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 self-end md:self-center">
-            {/* THE REQUESTED DELETE BOX TOOL (单击进入删除模式，框选隐去) */}
-            <DeleteBoxTool
-              isActive={isDeleteModeActive}
-              onToggle={() => setIsDeleteModeActive((prev) => !prev)}
-              selectedCount={liveSelectedIds.size}
-            />
+        <div className="w-full bg-white/85 backdrop-blur-md border-b border-amber-900/10 z-20 shadow-2xs">
+          <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 px-5 py-1.5">
+            <div className="flex-1 min-w-0">
+              <MathProblemBar
+                currentProblem={currentProblem}
+                onNewProblem={handleNewProblem}
+                onAutoSetupMinuend={handleAutoSetupMinuend}
+                onClear={handleClear}
+                onTidy={handleTidy}
+                items={items}
+                deletedCount={deletedCountSinceStart}
+                checkResult={checkResult}
+                onCheck={handleCheck}
+              />
+            </div>
 
-            {/* Sound toggle button */}
-            <button
-              id="sound-toggle-btn"
-              onClick={handleToggleSound}
-              title={soundOn ? '音效开启' : '音效静音'}
-              className="p-1.5 sm:p-2 rounded-xl bg-white/90 hover:bg-white text-amber-900 border border-amber-200/80 shadow-2xs transition-all cursor-pointer"
-            >
-              {soundOn ? <Volume2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-700" /> : <VolumeX className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400" />}
-            </button>
+            {/* Right tools: Delete Box Tool, Sound, Settings */}
+            <div className="flex items-center gap-2 shrink-0">
+              <DeleteBoxTool
+                isActive={isDeleteModeActive}
+                onToggle={() => setIsDeleteModeActive((prev) => !prev)}
+                selectedCount={liveSelectedIds.size}
+              />
 
-            {/* Settings button (Background transparency slider) */}
-            <div className="relative">
               <button
-                id="settings-toggle-btn"
-                onClick={() => setShowSettings((prev) => !prev)}
-                title="调整背景透明度"
-                className={`p-1.5 sm:p-2 rounded-xl border shadow-2xs transition-all cursor-pointer ${
-                  showSettings
-                    ? 'bg-amber-100 text-amber-900 border-amber-400'
-                    : 'bg-white/90 hover:bg-white text-amber-900 border-amber-200/80'
-                }`}
+                id="sound-toggle-btn"
+                onClick={handleToggleSound}
+                title={soundOn ? '音效开启' : '音效静音'}
+                className="p-2 rounded-xl bg-white/90 hover:bg-white text-amber-900 border border-amber-200/80 shadow-2xs transition-all cursor-pointer"
               >
-                <Sliders className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-700" />
+                {soundOn ? <Volume2 className="w-4 h-4 text-amber-700" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
               </button>
 
-              {/* Popover slider for background opacity */}
-              {showSettings && (
-                <div
-                  id="bg-settings-popover"
-                  className="absolute right-0 top-9 sm:top-11 w-56 sm:w-64 bg-white/95 backdrop-blur-md rounded-2xl p-2.5 sm:p-3 shadow-xl border border-amber-300 z-50 text-xs text-slate-800"
+              <div className="relative">
+                <button
+                  id="settings-toggle-btn"
+                  onClick={() => setShowSettings((prev) => !prev)}
+                  title="调整背景透明度"
+                  className={`p-2 rounded-xl border shadow-2xs transition-all cursor-pointer ${
+                    showSettings
+                      ? 'bg-amber-100 text-amber-900 border-amber-400'
+                      : 'bg-white/90 hover:bg-white text-amber-900 border-amber-200/80'
+                  }`}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-bold text-amber-950 text-[11px] sm:text-xs">图书馆背景透明度</span>
-                    <span className="font-mono text-amber-800 text-[11px] sm:text-xs">{Math.round(bgOpacity * 100)}%</span>
+                  <Sliders className="w-4 h-4 text-amber-700" />
+                </button>
+
+                {showSettings && (
+                  <div
+                    id="bg-settings-popover"
+                    className="absolute right-0 top-11 w-64 bg-white/95 backdrop-blur-md rounded-2xl p-3 shadow-xl border border-amber-300 z-50 text-xs text-slate-800"
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="font-bold text-amber-950">图书馆背景透明度</span>
+                      <span className="font-mono text-amber-800">{Math.round(bgOpacity * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.10"
+                      max="0.80"
+                      step="0.05"
+                      value={bgOpacity}
+                      onChange={(e) => setBgOpacity(parseFloat(e.target.value))}
+                      className="w-full accent-amber-600 cursor-pointer"
+                    />
+                    <div className="flex justify-between text-[10px] text-slate-400 mt-1">
+                      <span>更淡 (突出小棒)</span>
+                      <span>更浓 (突出背景)</span>
+                    </div>
                   </div>
-                  <input
-                    type="range"
-                    min="0.10"
-                    max="0.80"
-                    step="0.05"
-                    value={bgOpacity}
-                    onChange={(e) => setBgOpacity(parseFloat(e.target.value))}
-                    className="w-full accent-amber-600 cursor-pointer"
-                  />
-                  <div className="flex justify-between text-[9px] sm:text-[10px] text-slate-400 mt-1">
-                    <span>更淡 (清晰木棒)</span>
-                    <span>更浓 (显图书馆)</span>
-                  </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      {/* 4. ACTIVE DELETION MODE BANNER (When Delete Mode is turned on) */}
+      {/* 4. FLOATING CHECK FEEDBACK TOAST (DOES NOT CONSUME ANY CANVAS SPACE) */}
+      <FloatingToast
+        result={checkResult}
+        onClose={() => setCheckResult(null)}
+      />
+
+      {/* 5. 1:1 BOOK SHELF MODAL (ACCESSIBLE FROM MOBILE CAPTION OR DESKTOP) */}
+      <BookShelfModal
+        isOpen={isBookShelfModalOpen}
+        onClose={() => setIsBookShelfModalOpen(false)}
+        items={items}
+        deletedCountSinceStart={deletedCountSinceStart}
+      />
+
+      {/* 6. FLOATING DELETION MODE BANNER (When Delete Mode is turned on) */}
       <AnimatePresence>
         {isDeleteModeActive && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -10 }}
-            className="absolute top-22 sm:top-28 inset-x-2 sm:inset-x-0 mx-auto max-w-sm sm:max-w-xl z-30 px-3 sm:px-4 py-1.5 sm:py-2 bg-rose-600/95 text-white rounded-xl shadow-lg backdrop-blur-sm border border-rose-400 flex items-center justify-between text-[11px] sm:text-xs font-medium"
+            className="absolute top-14 sm:top-24 inset-x-2 sm:inset-x-0 mx-auto max-w-sm sm:max-w-md z-40 px-3 py-1.5 bg-rose-600/95 text-white rounded-xl shadow-lg backdrop-blur-sm border border-rose-400 flex items-center justify-between text-[11px] sm:text-xs font-medium"
           >
             <div className="flex items-center gap-1.5">
-              <span className="text-sm sm:text-base">✂️</span>
-              <span>
-                <strong>删除模式中：</strong>拉框圈住木棍即可隐去，上方图书同步减除！
-              </span>
+              <span>✂️</span>
+              <span>拉框圈住木棍即可移走 (书本同步扣除)</span>
             </div>
             <button
               onClick={() => setIsDeleteModeActive(false)}
-              className="ml-2 px-2 py-0.5 bg-rose-800 hover:bg-rose-900 rounded text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
+              className="px-2 py-0.5 bg-rose-800 hover:bg-rose-900 rounded text-[10px] sm:text-xs font-bold transition-all cursor-pointer whitespace-nowrap"
             >
               退出
             </button>
@@ -685,7 +721,7 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* 5. MAIN WORKBENCH / BLACKBOARD AREA */}
+      {/* 7. EXPANDED WORKBENCH / CANVAS (NOW TAKES OVER 90% OF SCREEN ON MOBILE!) */}
       <main
         id="workbench-canvas"
         ref={boardRef}
@@ -696,7 +732,7 @@ export default function App() {
           isDeleteModeActive ? 'cursor-crosshair' : 'cursor-default'
         }`}
       >
-        {/* Soft Grid/Desk Guides */}
+        {/* Soft Grid Guides */}
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#78350f08_1px,transparent_1px),linear-gradient(to_bottom,#78350f08_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
 
         {/* Board Items */}
@@ -758,7 +794,7 @@ export default function App() {
           })}
         </AnimatePresence>
 
-        {/* 6. MARQUEE SELECTION RECTANGLE (During deletion drag) */}
+        {/* MARQUEE SELECTION RECTANGLE */}
         {selectionRect && (
           <div
             id="selection-marquee-box"
@@ -772,13 +808,13 @@ export default function App() {
           >
             {liveSelectedIds.size > 0 && (
               <div className="absolute -top-6 left-1 px-1.5 py-0.2 bg-rose-700 text-white font-bold text-[10px] rounded shadow-md whitespace-nowrap">
-                框选目标：{liveSelectedIds.size} 项 (松开隐去)
+                圈住目标：{liveSelectedIds.size} 项 (松手移走)
               </div>
             )}
           </div>
         )}
 
-        {/* 7. DRAGGING GHOST (When dragging directly from SpawnerDock) */}
+        {/* DRAGGING GHOST (When dragging directly from SpawnerDock) */}
         {spawnerDrag && (
           <div
             id="spawner-drag-ghost"
@@ -793,7 +829,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 8. INFINITE SPAWNER DOCK (停在左下角放置，支持无限复制木捆与木棍) */}
+        {/* INFINITE SPAWNER DOCK (Supports Collapsing on Mobile) */}
         <SpawnerDock
           onStartDrag={handleStartSpawnerDrag}
           onSpawnDirectly={handleSpawnDirectly}
@@ -803,23 +839,21 @@ export default function App() {
         {/* Empty state hint */}
         {items.length === 0 && (
           <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center text-center p-3 z-5">
-            <div className="bg-white/80 backdrop-blur-xs px-4 sm:px-6 py-3 sm:py-4 rounded-2xl border border-amber-900/10 shadow-xs max-w-xs sm:max-w-sm flex flex-col items-center gap-1">
-              <span className="text-xl sm:text-2xl">🪵</span>
-              <p className="text-xs sm:text-sm font-bold text-amber-950">
-                画板当前为空（无木棒）
-              </p>
-              <p className="text-[11px] sm:text-xs text-slate-600 leading-relaxed">
-                可从左下角拖出木捆和木棍，或点击上方「摆放被减数」开始操作
+            <div className="bg-white/85 backdrop-blur-xs px-4 py-3 rounded-2xl border border-amber-900/10 shadow-xs max-w-xs flex flex-col items-center gap-1">
+              <span className="text-2xl">🪵</span>
+              <p className="text-xs font-bold text-amber-950">画板当前为空</p>
+              <p className="text-[11px] text-slate-600">
+                可从左下角拖出木棒，或点击上方「摆放」开始算式演示
               </p>
             </div>
           </div>
         )}
 
-        {/* Subtle operation tip for desktop */}
-        <div className="absolute bottom-2 sm:bottom-3 right-2 sm:right-4 z-10 pointer-events-none hidden sm:flex items-center gap-1.5 text-xs text-amber-950/70 bg-white/70 backdrop-blur-xs px-3 py-1.5 rounded-xl border border-amber-900/10 shadow-2xs">
-          <span className="font-bold text-amber-900">操作提示：</span>
+        {/* Subtle operation tip */}
+        <div className="absolute bottom-2 right-2 sm:right-4 z-10 pointer-events-none hidden sm:flex items-center gap-1.5 text-xs text-amber-950/70 bg-white/75 backdrop-blur-xs px-3 py-1 rounded-xl border border-amber-900/10 shadow-2xs">
+          <span className="font-bold text-amber-900">提示：</span>
           <span className="text-[11px] text-slate-600">
-            双击木捆或点右上角拆开为10根；开启右上角删除框可圈选移走木棒
+            双击木捆或点右上角拆为10根；点删除框圈选移走木棒
           </span>
         </div>
       </main>
