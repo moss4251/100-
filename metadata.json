@@ -1,0 +1,6 @@
+{
+  "name": "退位减法小棒教具",
+  "description": "二年级100以内退位减法直观演示教具，支持无限复制木捆与单棍、双击拆捆保留绳结、框选删除隐去与图书数量同步显示",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
